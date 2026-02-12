@@ -10,12 +10,6 @@ def main() -> None:
         _run_setup(args[1:])
         return
 
-    mode = "quota"
-    if "--mode" in args:
-        idx = args.index("--mode")
-        if idx + 1 < len(args):
-            mode = args[idx + 1]
-
     if "--help" in args or "-h" in args:
         _print_help()
         return
@@ -28,15 +22,14 @@ def main() -> None:
 
     from .app import ClaudemonApp
 
-    app = ClaudemonApp(mode=mode)
+    app = ClaudemonApp()
     app.run()
 
 
 def _run_setup(args: list[str]) -> None:
-    api_only = "--api" in args
     from .auth import interactive_setup
 
-    interactive_setup(api_only=api_only)
+    interactive_setup()
 
 
 def _print_help() -> None:
@@ -45,9 +38,7 @@ def _print_help() -> None:
 
 Usage:
   claudemon              Launch the TUI dashboard
-  claudemon setup        Interactive OAuth + API key setup
-  claudemon setup --api  Configure Admin API key only
-  claudemon --mode api   Launch in API monitoring mode
+  claudemon setup        Interactive OAuth setup
 
 Options:
   --help, -h       Show this help message
@@ -56,7 +47,6 @@ Options:
 Keybindings (in TUI):
   q    Quit
   r    Force refresh
-  m    Toggle API mode
   ?    Show help"""
     )
 

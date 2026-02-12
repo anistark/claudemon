@@ -9,7 +9,6 @@ CONFIG_FILE = CONFIG_DIR / "config.toml"
 DEFAULT_CONFIG = {
     "plan_type": "pro",
     "refresh_interval": 5,
-    "admin_api_key": "",
 }
 
 
