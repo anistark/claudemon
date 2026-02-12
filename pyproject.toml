@@ -1,6 +1,6 @@
 [project]
 name = "claudemon"
-version = "0.1.0"
+version = "0.1.1"
 description = "Claude Usage Monitor TUI - monitor your Claude usage in real-time"
 readme = "README.md"
 license = "MIT"
