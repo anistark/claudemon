@@ -3,7 +3,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Box, Text, useApp, useInput } from "ink";
+import { Box, Text, useApp, useInput, useStdout } from "ink";
 
 import { fetchQuota, AuthenticationError, QuotaFetchError } from "./api.js";
 import { getOAuthToken, isAuthenticated } from "./auth.js";
@@ -11,11 +11,15 @@ import { loadConfig } from "./config.js";
 import { type QuotaData } from "./models.js";
 import { HeaderBar } from "./components/HeaderBar.js";
 import { PieChart } from "./components/PieChart.js";
-import { StatsPanel } from "./components/StatsPanel.js";
+
 
 const WEEKLY_REFRESH_INTERVAL = 300; // 5 minutes in seconds
 
-export function App(): React.ReactElement {
+interface AppProps {
+  version?: string;
+}
+
+export function App({ version = "" }: AppProps): React.ReactElement {
   const { exit } = useApp();
   const config = useRef(loadConfig());
   const refreshInterval = Number(config.current["refresh_interval"] ?? 5);
@@ -30,6 +34,14 @@ export function App(): React.ReactElement {
   const [showHelp, setShowHelp] = useState(false);
   const lastRefreshTime = useRef(0);
   const authenticated = useRef(isAuthenticated());
+  const { stdout } = useStdout();
+  const [termRows, setTermRows] = useState(stdout.rows ?? 24);
+
+  useEffect(() => {
+    const onResize = () => setTermRows(stdout.rows ?? 24);
+    stdout.on("resize", onResize);
+    return () => { stdout.off("resize", onResize); };
+  }, [stdout]);
 
   const doRefresh = useCallback(async (weekly = false) => {
     setIsLoading(true);
@@ -106,14 +118,14 @@ export function App(): React.ReactElement {
 
   if (!authenticated.current) {
     return (
-      <Box flexDirection="column" paddingX={2} paddingY={1}>
+      <Box marginTop={1}><Box flexDirection="column" borderStyle="round" width="100%" height={termRows - 1}>
         <HeaderBar
           planType={planType}
           lastRefreshAgo={0}
           isLoading={false}
           errorMessage=""
         />
-        <Box paddingX={4} paddingY={2} justifyContent="center">
+        <Box flexGrow={1} paddingX={4} paddingY={2} justifyContent="center" alignItems="center">
           <Text>
             <Text bold color="yellow">
               Not authenticated
@@ -123,68 +135,61 @@ export function App(): React.ReactElement {
             and start monitoring your Claude quota.
           </Text>
         </Box>
-      </Box>
+        <Box width="100%" paddingX={2} justifyContent="space-between" borderStyle="single" borderTop borderBottom={false} borderLeft={false} borderRight={false}>
+          <Text dimColor>q: Quit | r: Refresh | ?: Help</Text>
+          {version && <Text dimColor>v{version}</Text>}
+        </Box>
+      </Box></Box>
     );
   }
 
   if (showHelp) {
     return (
-      <Box flexDirection="column" paddingX={2} paddingY={1}>
+      <Box marginTop={1}><Box flexDirection="column" borderStyle="round" width="100%" height={termRows - 1}>
         <HeaderBar
           planType={planType}
           lastRefreshAgo={lastRefreshAgo}
           isLoading={isLoading}
           errorMessage={errorMessage}
         />
-        <Box paddingX={4} paddingY={2} flexDirection="column">
+        <Box flexGrow={1} paddingX={4} paddingY={2} flexDirection="column" justifyContent="center">
           <Text bold>Keybindings</Text>
           <Text>  q — Quit</Text>
           <Text>  r — Force refresh</Text>
           <Text>  ? — Toggle help</Text>
         </Box>
-      </Box>
+        <Box width="100%" paddingX={2} justifyContent="space-between" borderStyle="single" borderTop borderBottom={false} borderLeft={false} borderRight={false}>
+          <Text dimColor>q: Quit | r: Refresh | ?: Help</Text>
+          {version && <Text dimColor>v{version}</Text>}
+        </Box>
+      </Box></Box>
     );
   }
 
   return (
-    <Box flexDirection="column" width="100%">
+    <Box marginTop={1}><Box flexDirection="column" borderStyle="round" width="100%" height={termRows - 1}>
       <HeaderBar
         planType={planType}
         lastRefreshAgo={lastRefreshAgo}
         isLoading={isLoading}
         errorMessage={errorMessage}
       />
-      <Box flexGrow={1}>
-        {/* Charts area — 60% */}
-        <Box flexDirection="column" width="60%">
-          <PieChart
-            usagePct={quotaData?.fiveHourUsagePct ?? 0}
-            label="5-Hour Quota"
-            resetTime={quotaData?.fiveHourResetTime ?? null}
-          />
-          <Box borderStyle="single" borderTop borderBottom={false} borderLeft={false} borderRight={false}>
-            <PieChart
-              usagePct={quotaData?.sevenDayUsagePct ?? 0}
-              label="Weekly Quota"
-              resetTime={quotaData?.sevenDayResetTime ?? null}
-            />
-          </Box>
-        </Box>
-        {/* Stats area — 40% */}
-        <Box
-          width="40%"
-          borderStyle="single"
-          borderLeft
-          borderRight={false}
-          borderTop={false}
-          borderBottom={false}
-        >
-          <StatsPanel quotaData={quotaData} />
-        </Box>
+      <Box flexGrow={1} flexDirection="row" justifyContent="center" alignItems="center" paddingX={2} gap={4}>
+        <PieChart
+          usagePct={quotaData?.fiveHourUsagePct ?? 0}
+          label="5-Hour Quota"
+          resetTime={quotaData?.fiveHourResetTime ?? null}
+        />
+        <PieChart
+          usagePct={quotaData?.sevenDayUsagePct ?? 0}
+          label="Weekly Quota"
+          resetTime={quotaData?.sevenDayResetTime ?? null}
+        />
       </Box>
-      <Box paddingX={2}>
+      <Box width="100%" paddingX={2} justifyContent="space-between" borderStyle="single" borderTop borderBottom={false} borderLeft={false} borderRight={false}>
         <Text dimColor>q: Quit | r: Refresh | ?: Help</Text>
+        {version && <Text dimColor>v{version}</Text>}
       </Box>
-    </Box>
+    </Box></Box>
   );
 }

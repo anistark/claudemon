@@ -73,8 +73,8 @@ export function PieChart({
   const boldColor = getBoldColor(pct);
 
   // Donut dimensions
-  const outerR = 5.0;
-  const innerR = 3.0;
+  const outerR = 6.5;
+  const innerR = 5.0;
   const rows = Math.floor(outerR * 2) + 1;
   const cols = Math.floor(outerR * 4) + 1;
 
@@ -134,23 +134,12 @@ export function PieChart({
     }
   }
 
-  // Build right-side info
-  const rightLines: Map<number, string> = new Map();
-  if (resetTime) {
-    rightLines.set(centerRow - 1, chalk.dim("Resets"));
-    rightLines.set(centerRow, chalk.dim.bold(formatResetTime(resetTime)));
-  }
-
   // Render to lines
   const lines: string[] = [];
-  for (let rowIdx = 0; rowIdx < grid.length; rowIdx++) {
-    const row = grid[rowIdx]!;
+  for (const row of grid) {
     let line = "";
     for (const cell of row) {
       line += cell.style ? cell.style(cell.char) : cell.char;
-    }
-    if (rightLines.has(rowIdx)) {
-      line += "  " + rightLines.get(rowIdx)!;
     }
     lines.push(line);
   }
@@ -160,6 +149,9 @@ export function PieChart({
       {lines.map((line, i) => (
         <Text key={i}>{line}</Text>
       ))}
+      {resetTime && (
+        <Text dimColor>Resets {formatResetTime(resetTime)}</Text>
+      )}
     </Box>
   );
 }

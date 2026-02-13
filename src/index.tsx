@@ -31,8 +31,13 @@ function main(): void {
     return;
   }
 
-  // Launch TUI
-  render(<App />);
+  // Launch TUI (full-screen alternate screen)
+  process.stdout.write("\x1b[?1049h"); // enter alternate screen
+  process.stdout.write("\x1b[2J\x1b[H"); // clear + home
+  const instance = render(<App version={VERSION} />);
+  instance.waitUntilExit().then(() => {
+    process.stdout.write("\x1b[?1049l"); // restore main screen
+  });
 }
 
 async function runSetup(): Promise<void> {
