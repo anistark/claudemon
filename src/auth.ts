@@ -174,7 +174,7 @@ export function detectPlanType(): string {
 // Interactive setup
 // ---------------------------------------------------------------------------
 
-export async function interactiveSetup(): Promise<void> {
+export async function interactiveSetup(forceReauth = false): Promise<void> {
   const config = loadConfig();
 
   console.log("=".repeat(50));
@@ -184,7 +184,7 @@ export async function interactiveSetup(): Promise<void> {
 
   // Check if Claude Code credentials already exist
   const creds = getClaudeCodeCredentials();
-  if (creds) {
+  if (creds && !forceReauth) {
     console.log("Found existing Claude Code credentials.");
     const token = creds.accessToken ?? "";
     if (token.length > 16) {
@@ -204,6 +204,12 @@ export async function interactiveSetup(): Promise<void> {
     console.log();
     console.log("Setup complete! Run 'claudemon' to launch the dashboard.");
     return;
+  }
+
+  if (forceReauth) {
+    console.log("Re-authenticating (overwriting existing credentials)...");
+    clearToken();
+    console.log();
   }
 
   // No Claude Code credentials — guide user through login

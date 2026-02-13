@@ -1,6 +1,6 @@
 {
     "name": "claudemon",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "description": "Claude Usage Monitor TUI - monitor your Claude usage in real-time",
     "type": "module",
     "main": "dist/index.js",

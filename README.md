@@ -29,20 +29,32 @@ claudemon setup
 
 This detects your Claude Code OAuth credentials automatically. If you haven't logged in to Claude Code yet, it will guide you through the process.
 
-## Usage
+## Commands
 
-```sh
-# Launch the TUI dashboard
-claudemon
-```
+| Command | Description |
+|---------|-------------|
+| `claudemon` | Launch the TUI dashboard |
+| `claudemon setup` | Interactive OAuth setup (skips if already authenticated) |
+| `claudemon setup --re` | Force re-authentication, overwriting existing token |
+| `claudemon --help`, `-h` | Show help message |
+| `claudemon --version` | Show version |
 
-### Keybindings
+## Keybindings (in TUI)
 
 | Key | Action |
 |-----|--------|
 | `q` | Quit |
 | `r` | Force refresh |
-| `?` | Show help |
+| `?` | Toggle help |
+
+## Configuration
+
+Config file: `~/.config/claudemon/config.toml`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `plan_type` | string | `"pro"` | Claude plan type (`pro` or `max`) |
+| `refresh_interval` | number | `5` | Auto-refresh interval in seconds |
 
 ## Development
 

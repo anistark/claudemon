@@ -27,7 +27,8 @@ function main(): void {
   }
 
   if (args[0] === "setup") {
-    runSetup();
+    const forceReauth = args.includes("--re");
+    runSetup(forceReauth);
     return;
   }
 
@@ -40,9 +41,9 @@ function main(): void {
   });
 }
 
-async function runSetup(): Promise<void> {
+async function runSetup(forceReauth = false): Promise<void> {
   const { interactiveSetup } = await import("./auth.js");
-  await interactiveSetup();
+  await interactiveSetup(forceReauth);
 }
 
 function printHelp(): void {
@@ -51,6 +52,7 @@ function printHelp(): void {
 Usage:
   claudemon              Launch the TUI dashboard
   claudemon setup        Interactive OAuth setup
+  claudemon setup --re   Force re-authentication (overwrite existing token)
 
 Options:
   --help, -h       Show this help message
