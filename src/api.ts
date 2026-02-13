@@ -1,0 +1,123 @@
+/**
+ * API client for Claude OAuth usage endpoint.
+ */
+
+import { type ModelQuota, type QuotaData, createQuotaData } from "./models.js";
+
+export const OAUTH_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
+export const OAUTH_BETA_HEADER = "oauth-2025-04-20";
+
+export class QuotaFetchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "QuotaFetchError";
+  }
+}
+
+export class AuthenticationError extends QuotaFetchError {
+  constructor(message: string) {
+    super(message);
+    this.name = "AuthenticationError";
+  }
+}
+
+export async function fetchQuota(oauthToken: string): Promise<QuotaData> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${oauthToken}`,
+    "anthropic-beta": OAUTH_BETA_HEADER,
+  };
+
+  let resp: Response;
+  try {
+    resp = await fetch(OAUTH_USAGE_URL, {
+      headers,
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch (e) {
+    throw new QuotaFetchError(`Network error: ${e}`);
+  }
+
+  if (resp.status === 401) {
+    throw new AuthenticationError(
+      "OAuth token is invalid or expired. Run 'claudemon setup' to re-authenticate.",
+    );
+  }
+  if (resp.status === 403) {
+    throw new AuthenticationError(
+      "Access denied. Your token may lack the required permissions.",
+    );
+  }
+  if (resp.status !== 200) {
+    const text = await resp.text();
+    throw new QuotaFetchError(
+      `API returned status ${resp.status}: ${text}`,
+    );
+  }
+
+  const data = (await resp.json()) as Record<string, unknown>;
+  return parseQuotaResponse(data);
+}
+
+function parseQuotaResponse(data: Record<string, unknown>): QuotaData {
+  const quota = createQuotaData();
+
+  // Parse 5-hour window
+  const fiveHour = (data["five_hour"] ?? data["fiveHour"] ?? {}) as Record<
+    string,
+    unknown
+  >;
+  if (fiveHour) {
+    quota.fiveHourUsagePct =
+      (fiveHour["utilization"] as number) ??
+      (fiveHour["usage_pct"] as number) ??
+      0;
+    const resetAt =
+      (fiveHour["resets_at"] as string) ??
+      (fiveHour["reset_at"] as string) ??
+      (fiveHour["resetAt"] as string);
+    if (resetAt) {
+      quota.fiveHourResetTime = parseISOTime(resetAt);
+    }
+  }
+
+  // Parse 7-day window
+  const sevenDay = (data["seven_day"] ?? data["sevenDay"] ?? {}) as Record<
+    string,
+    unknown
+  >;
+  if (sevenDay) {
+    quota.sevenDayUsagePct =
+      (sevenDay["utilization"] as number) ??
+      (sevenDay["usage_pct"] as number) ??
+      0;
+    const resetAt =
+      (sevenDay["resets_at"] as string) ??
+      (sevenDay["reset_at"] as string) ??
+      (sevenDay["resetAt"] as string);
+    if (resetAt) {
+      quota.sevenDayResetTime = parseISOTime(resetAt);
+    }
+  }
+
+  // Parse model-specific quotas
+  const models = (data["models"] ?? data["model_quotas"] ?? []) as Array<
+    Record<string, unknown>
+  >;
+  for (const m of models) {
+    const name =
+      (m["model"] as string) ?? (m["name"] as string) ?? "unknown";
+    const usage =
+      (m["utilization"] as number) ?? (m["usage_pct"] as number) ?? 0;
+    quota.modelQuotas.push({ modelName: name, usagePct: usage } as ModelQuota);
+  }
+
+  // Plan type
+  quota.planType =
+    (data["plan_type"] as string) ?? (data["planType"] as string) ?? "pro";
+
+  return quota;
+}
+
+function parseISOTime(timeStr: string): Date {
+  return new Date(timeStr.replace("Z", "+00:00").endsWith("+00:00") ? timeStr : timeStr);
+}

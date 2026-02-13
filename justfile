@@ -5,40 +5,41 @@
 default:
     @just --list
 
-# Format code with ruff
-format:
-    uv run ruff format src/claudemon/
+# Install dependencies
+install:
+    pnpm install
 
-# Lint code with ruff
-lint:
-    uv run ruff check src/claudemon/
-
-# Fix linting issues automatically
-fix:
-    uv run ruff check --fix src/claudemon/
-
-# Type check with ty
-check:
-    uv run ty check src/claudemon/
-
-# Run all quality checks (format, lint, type check)
-qa: format lint check
-
-# Run tests
-test:
-    uv run python -m pytest
-
-# Build distribution packages
+# Build TypeScript
 build:
-    uv build
+    pnpm run build
+
+# Watch mode (rebuild on changes)
+dev:
+    pnpm run dev
+
+# Type check without emitting
+lint:
+    pnpm run lint
+
+# Run all quality checks
+qa: lint build
+
+# Run the TUI
+start:
+    node dist/index.js
+
+# Build and run claudemon with optional args (e.g. `just run setup`)
+run *ARGS: build
+    node dist/index.js {{ARGS}}
+
+# Run interactive setup
+setup:
+    node dist/index.js setup
 
 # Clean build artifacts
 clean:
-    rm -rf dist/ build/ *.egg-info
-    find . -type d -name __pycache__ -exec rm -rf {} +
-    find . -type f -name "*.pyc" -delete
+    rm -rf dist/
 
-# Publish to PyPI (requires credentials in ~/.pypirc)
+# Publish to npm
 publish: clean build
-    @echo "Publishing to PyPI..."
-    uv publish --token "$(grep -A2 '\[pypi\]' ~/.pypirc | grep password | cut -d'=' -f2- | xargs)"
+    pnpm publish
