@@ -60,6 +60,21 @@ Config file: `~/.config/claudemon/config.toml`
 | `plan_type` | string | `"pro"` | Claude plan type (`pro` or `max`) |
 | `refresh_interval` | number | `5` | Auto-refresh interval in seconds |
 
+<details>
+<summary>Advanced OAuth settings (usually no need to change)</summary>
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `oauth_client_id` | string | `"9d1c250a-..."` | Public OAuth client ID for Anthropic PKCE flow |
+| `oauth_authorize_url` | string | `"https://claude.ai/oauth/authorize"` | Authorization endpoint |
+| `oauth_token_url` | string | `"https://console.anthropic.com/v1/oauth/token"` | Token exchange endpoint |
+| `oauth_redirect_uri` | string | `"https://console.anthropic.com/oauth/code/callback"` | OAuth redirect URI |
+| `oauth_scopes` | string | `"org:create_api_key user:profile user:inference"` | OAuth scopes |
+| `oauth_usage_url` | string | `"https://api.anthropic.com/api/oauth/usage"` | Usage/quota API endpoint |
+| `oauth_beta_header` | string | `"oauth-2025-04-20"` | Required beta header for the usage API |
+
+</details>
+
 ## Development
 
 ```sh

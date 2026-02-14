@@ -3,9 +3,7 @@
  */
 
 import { type ModelQuota, type QuotaData, createQuotaData } from "./models.js";
-
-export const OAUTH_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
-export const OAUTH_BETA_HEADER = "oauth-2025-04-20";
+import { loadConfig } from "./config.js";
 
 export class QuotaFetchError extends Error {
   constructor(message: string) {
@@ -22,14 +20,18 @@ export class AuthenticationError extends QuotaFetchError {
 }
 
 export async function fetchQuota(oauthToken: string): Promise<QuotaData> {
+  const config = loadConfig();
+  const usageUrl = config["oauth_usage_url"] as string;
+  const betaHeader = config["oauth_beta_header"] as string;
+
   const headers: Record<string, string> = {
     Authorization: `Bearer ${oauthToken}`,
-    "anthropic-beta": OAUTH_BETA_HEADER,
+    "anthropic-beta": betaHeader,
   };
 
   let resp: Response;
   try {
-    resp = await fetch(OAUTH_USAGE_URL, {
+    resp = await fetch(usageUrl, {
       headers,
       signal: AbortSignal.timeout(15000),
     });
