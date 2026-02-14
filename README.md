@@ -1,8 +1,8 @@
-# claudemon
+# Claudemon
 
 Claude Usage Monitor TUI - monitor your Claude Pro/Max plan quota in real-time.
 
-<img width="1906" height="1017" alt="claudemon-ss" src="https://github.com/user-attachments/assets/f1b818e1-f34b-4703-8cfb-cd630342b1b5" />
+![claudemon-demo](assets/claudemon.gif)
 
 [![npm version](https://img.shields.io/npm/v/claudemon)](https://www.npmjs.com/package/claudemon)
 [![npm downloads](https://img.shields.io/npm/dm/claudemon)](https://www.npmjs.com/package/claudemon)
@@ -11,7 +11,6 @@ Claude Usage Monitor TUI - monitor your Claude Pro/Max plan quota in real-time.
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 ![claudemon-demo](https://github.com/user-attachments/assets/7acff469-ac72-4de5-8a50-b9231667fbf4)
-
 
 ## Install
 
@@ -81,5 +80,7 @@ just dev
 # Type check
 just lint
 ```
+
+<img width="1906" height="1017" alt="claudemon-ss" src="https://github.com/user-attachments/assets/f1b818e1-f34b-4703-8cfb-cd630342b1b5" />
 
 [MIT License](./LICENSE)
