@@ -9,6 +9,7 @@ import React from "react";
 import { render } from "ink";
 
 import { App } from "./app.js";
+import { validateToken } from "./api.js";
 
 const require = createRequire(import.meta.url);
 const { version: VERSION } = require("../package.json");
@@ -48,7 +49,7 @@ const LOGO = `
                                  ---===---
 `;
 
-function main(): void {
+async function main(): Promise<void> {
   const args = process.argv.slice(2);
 
   if (args.includes("--help") || args.includes("-h")) {
@@ -64,9 +65,18 @@ function main(): void {
 
   if (args[0] === "setup") {
     const forceReauth = args.includes("--re");
-    runSetup(forceReauth);
+    await runSetup(forceReauth);
     return;
   }
+
+  // Validate token before launching the TUI
+  console.log("Validating OAuth token...");
+  const result = await validateToken();
+  if (!result.ok) {
+    console.error(`\n✗ ${result.reason}\n`);
+    process.exit(1);
+  }
+  console.log("✓ Token is valid.\n");
 
   // Launch TUI (full-screen alternate screen)
   process.stdout.write("\x1b[?1049h"); // enter alternate screen
