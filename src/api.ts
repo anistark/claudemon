@@ -60,6 +60,66 @@ export async function fetchQuota(oauthToken: string): Promise<QuotaData> {
   return parseQuotaResponse(data);
 }
 
+/**
+ * Quick health-check: verifies that an OAuth token exists and is accepted
+ * by the API.  Returns `{ ok: true }` on success, or `{ ok: false, reason }`
+ * on failure.
+ */
+export async function validateToken(): Promise<
+  { ok: true } | { ok: false; reason: string }
+> {
+  const { getOAuthToken } = await import("./auth.js");
+  const token = getOAuthToken();
+
+  if (!token) {
+    return {
+      ok: false,
+      reason: "No OAuth token found. Please run 'claudemon setup' first.",
+    };
+  }
+
+  const config = loadConfig();
+  const usageUrl = config["oauth_usage_url"] as string;
+  const betaHeader = config["oauth_beta_header"] as string;
+
+  try {
+    const resp = await fetch(usageUrl, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "anthropic-beta": betaHeader,
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (resp.status === 401) {
+      return {
+        ok: false,
+        reason: "OAuth token is invalid or expired. Please run 'claudemon setup --re' to re-authenticate.",
+      };
+    }
+    if (resp.status === 403) {
+      return {
+        ok: false,
+        reason: "Access denied. Your token may lack the required permissions. Run 'claudemon setup --re'.",
+      };
+    }
+    if (resp.status !== 200) {
+      const text = await resp.text();
+      return {
+        ok: false,
+        reason: `API returned status ${resp.status}: ${text}`,
+      };
+    }
+
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      reason: `Network error while validating token: ${e}`,
+    };
+  }
+}
+
 function parseQuotaResponse(data: Record<string, unknown>): QuotaData {
   const quota = createQuotaData();
 
