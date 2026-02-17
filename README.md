@@ -75,6 +75,37 @@ Config file: `~/.config/claudemon/config.toml`
 
 </details>
 
+## Pi Integration
+
+Claudemon is also available as a [pi](https://github.com/badlogic/pi-mono) extension, so you can check your Claude quota without leaving your coding session.
+
+### Install
+
+```sh
+# From npm
+pi install npm:claudemon
+
+# From git
+pi install https://github.com/anistark/claudemon
+
+# Try without installing
+pi -e npm:claudemon
+```
+
+### Usage
+
+| Command | Description |
+|---------|-------------|
+| `/claudemon` | Show quota usage inline (5-hour, 7-day windows, per-model breakdown) |
+| `/claudemon --tui` | Launch the full TUI dashboard |
+| *"Check my Claude usage"* | The LLM calls the `claudemon` tool automatically |
+
+### Uninstall
+
+```sh
+pi remove npm:claudemon
+```
+
 ## Development
 
 ```sh
