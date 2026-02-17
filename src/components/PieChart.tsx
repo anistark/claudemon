@@ -25,42 +25,26 @@ function getBoldColor(pct: number): (s: string) => string {
 }
 
 function formatResetTime(reset: Date): string {
-  const now = new Date();
+  const diffMs = reset.getTime() - Date.now();
 
-  const resetLocal = reset;
-  const nowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const resetDate = new Date(
-    resetLocal.getFullYear(),
-    resetLocal.getMonth(),
-    resetLocal.getDate(),
-  );
+  if (diffMs <= 0) return "now";
 
-  const fmt = (d: Date): string => {
-    let hours = d.getHours();
-    const minutes = d.getMinutes();
-    const ampm = hours >= 12 ? "pm" : "am";
-    hours = hours % 12 || 12;
-    return `${hours}:${minutes.toString().padStart(2, "0")}${ampm}`;
-  };
+  const totalMinutes = Math.floor(diffMs / 60000);
+  const totalHours = Math.floor(diffMs / 3600000);
+  const totalDays = Math.floor(diffMs / 86400000);
 
-  // Same day
-  if (nowDate.getTime() === resetDate.getTime()) {
-    return fmt(resetLocal);
+  if (totalMinutes < 1) return "in less than a minute";
+  if (totalMinutes < 60) {
+    return `in ${totalMinutes} minute${totalMinutes !== 1 ? "s" : ""}`;
   }
-
-  // Tomorrow
-  const tomorrow = new Date(nowDate);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  if (tomorrow.getTime() === resetDate.getTime()) {
-    return `tomorrow at ${fmt(resetLocal)}`;
+  if (totalHours < 24) {
+    const remainingMin = totalMinutes % 60;
+    if (remainingMin === 0) return `in ${totalHours} hour${totalHours !== 1 ? "s" : ""}`;
+    return `in ${totalHours} hour${totalHours !== 1 ? "s" : ""}, ${remainingMin} min`;
   }
-
-  // Other
-  const months = [
-    "jan", "feb", "mar", "apr", "may", "jun",
-    "jul", "aug", "sep", "oct", "nov", "dec",
-  ];
-  return `${months[resetLocal.getMonth()]} ${resetLocal.getDate()} at ${fmt(resetLocal)}`;
+  const remainingHrs = totalHours % 24;
+  if (remainingHrs === 0) return `in ${totalDays} day${totalDays !== 1 ? "s" : ""}`;
+  return `in ${totalDays} day${totalDays !== 1 ? "s" : ""}, ${remainingHrs} hour${remainingHrs !== 1 ? "s" : ""}`;
 }
 
 export function PieChart({

@@ -80,7 +80,14 @@ export function formatCountdown(totalSeconds: number): string {
   const days = Math.floor(totalSeconds / 86400);
   const hours = Math.floor((totalSeconds % 86400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
+  if (days > 0) {
+    if (hours === 0) return `in ${days} day${days !== 1 ? "s" : ""}`;
+    return `in ${days} day${days !== 1 ? "s" : ""}, ${hours} hour${hours !== 1 ? "s" : ""}`;
+  }
+  if (hours > 0) {
+    if (minutes === 0) return `in ${hours} hour${hours !== 1 ? "s" : ""}`;
+    return `in ${hours} hour${hours !== 1 ? "s" : ""}, ${minutes} min`;
+  }
+  if (minutes < 1) return "in less than a minute";
+  return `in ${minutes} minute${minutes !== 1 ? "s" : ""}`;
 }
