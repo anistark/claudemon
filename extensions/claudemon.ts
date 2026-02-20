@@ -8,6 +8,7 @@
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { matchesKey, truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
@@ -179,22 +180,360 @@ function formatQuota(q: QuotaData): string {
 }
 
 // ---------------------------------------------------------------------------
+// TUI Dashboard Component (replaces broken pi.exec approach)
+// ---------------------------------------------------------------------------
+
+function formatResetTime(reset: Date): string {
+  const diffMs = reset.getTime() - Date.now();
+  if (diffMs <= 0) return "now";
+  const totalMinutes = Math.floor(diffMs / 60000);
+  const totalHours = Math.floor(diffMs / 3600000);
+  const totalDays = Math.floor(diffMs / 86400000);
+  if (totalMinutes < 1) return "in <1 min";
+  if (totalMinutes < 60) return `in ${totalMinutes}m`;
+  if (totalHours < 24) {
+    const remainingMin = totalMinutes % 60;
+    return remainingMin === 0 ? `in ${totalHours}h` : `in ${totalHours}h ${remainingMin}m`;
+  }
+  const remainingHrs = totalHours % 24;
+  return remainingHrs === 0 ? `in ${totalDays}d` : `in ${totalDays}d ${remainingHrs}h`;
+}
+
+function getColorFn(pct: number, theme: any): (s: string) => string {
+  if (pct < 50) return (s: string) => theme.fg("success", s);
+  if (pct < 80) return (s: string) => theme.fg("warning", s);
+  return (s: string) => theme.fg("error", s);
+}
+
+function renderDonut(pct: number, label: string, resetTime: Date | null, theme: any): string[] {
+  const clamped = Math.max(0, Math.min(100, pct));
+  const colorFn = getColorFn(clamped, theme);
+
+  const outerR = 6.5;
+  const innerR = 5.0;
+  const rows = Math.floor(outerR * 2) + 1;
+  const cols = Math.floor(outerR * 4) + 1;
+  const usedAngle = 2 * Math.PI * (clamped / 100);
+  const centerY = outerR;
+  const centerX = outerR * 2;
+
+  const grid: { char: string; style: ((s: string) => string) | null }[][] = [];
+
+  for (let row = 0; row < rows; row++) {
+    const line: { char: string; style: ((s: string) => string) | null }[] = [];
+    for (let col = 0; col < cols; col++) {
+      const dy = row - centerY;
+      const dx = (col - centerX) / 2.0;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (innerR <= dist && dist <= outerR) {
+        let angle = Math.atan2(dx, -dy);
+        if (angle < 0) angle += 2 * Math.PI;
+        if (angle <= usedAngle) {
+          line.push({ char: "█", style: colorFn });
+        } else {
+          line.push({ char: "░", style: (s: string) => theme.fg("dim", s) });
+        }
+      } else {
+        line.push({ char: " ", style: null });
+      }
+    }
+    grid.push(line);
+  }
+
+  // Place percentage in center
+  const pctStr = `${Math.round(clamped)}%`;
+  const centerRow = Math.floor(rows / 2);
+  const startCol = Math.floor(centerX - pctStr.length / 2);
+  for (let i = 0; i < pctStr.length; i++) {
+    const colIdx = startCol + i;
+    if (colIdx >= 0 && colIdx < cols) {
+      grid[centerRow]![colIdx] = { char: pctStr[i]!, style: (s: string) => theme.bold(colorFn(s)) };
+    }
+  }
+
+  // Place label below percentage
+  const labelRow = centerRow + 1;
+  const labelStart = Math.floor(centerX - label.length / 2);
+  if (labelRow < rows) {
+    for (let i = 0; i < label.length; i++) {
+      const colIdx = labelStart + i;
+      if (colIdx >= 0 && colIdx < cols) {
+        grid[labelRow]![colIdx] = { char: label[i]!, style: (s: string) => theme.fg("muted", s) };
+      }
+    }
+  }
+
+  // Render grid to lines
+  const lines: string[] = [];
+  for (const row of grid) {
+    let line = "";
+    for (const cell of row) {
+      line += cell.style ? cell.style(cell.char) : cell.char;
+    }
+    lines.push(line);
+  }
+
+  // Reset time line
+  if (resetTime) {
+    const resetStr = `Resets ${formatResetTime(resetTime)}`;
+    const pad = Math.max(0, Math.floor((cols - resetStr.length) / 2));
+    lines.push(" ".repeat(pad) + theme.fg("dim", resetStr));
+  } else {
+    lines.push("");
+  }
+
+  return lines;
+}
+
+function renderModelQuotas(quotaData: QuotaData, theme: any, width: number): string[] {
+  if (quotaData.modelQuotas.length === 0) return [];
+
+  const lines: string[] = [];
+  lines.push(theme.bold("  Per-Model Breakdown"));
+  lines.push("");
+
+  for (let i = 0; i < quotaData.modelQuotas.length; i++) {
+    const mq = quotaData.modelQuotas[i]!;
+    const prefix = i === quotaData.modelQuotas.length - 1 ? "  └ " : "  ├ ";
+    const colorFn = getColorFn(mq.usagePct, theme);
+    const barWidth = 15;
+    const filled = Math.round((mq.usagePct / 100) * barWidth);
+    const empty = barWidth - filled;
+    const bar = colorFn("█".repeat(filled)) + theme.fg("dim", "░".repeat(empty));
+    const pctStr = colorFn(`${Math.round(mq.usagePct)}%`.padStart(4));
+    const name = mq.modelName.length > 28 ? mq.modelName.slice(0, 25) + "..." : mq.modelName;
+    lines.push(`${prefix}${name.padEnd(28)} ${bar} ${pctStr}`);
+  }
+
+  return lines;
+}
+
+class ClaudemonDashboard {
+  private quotaData: QuotaData | null = null;
+  private isLoading = true;
+  private errorMessage = "";
+  private lastRefreshAgo = 0;
+  private lastRefreshTime = 0;
+  private showHelp = false;
+  private refreshInterval: ReturnType<typeof setInterval> | null = null;
+  private tickInterval: ReturnType<typeof setInterval> | null = null;
+  private autoRefreshInterval: ReturnType<typeof setInterval> | null = null;
+  private tui: { requestRender: () => void };
+  private theme: any;
+  private onClose: () => void;
+  private token: string;
+  private cachedWidth = 0;
+  private cachedLines: string[] = [];
+  private version = 0;
+  private cachedVersion = -1;
+
+  constructor(
+    tui: { requestRender: () => void },
+    theme: any,
+    token: string,
+    onClose: () => void,
+  ) {
+    this.tui = tui;
+    this.theme = theme;
+    this.token = token;
+    this.onClose = onClose;
+
+    // Initial fetch
+    this.doRefresh();
+
+    // Auto-refresh every 30 seconds
+    this.autoRefreshInterval = setInterval(() => this.doRefresh(), 30000);
+
+    // Tick the "last refreshed" counter every second
+    this.tickInterval = setInterval(() => {
+      if (this.lastRefreshTime > 0) {
+        this.lastRefreshAgo = Math.floor((Date.now() - this.lastRefreshTime) / 1000);
+        this.version++;
+        this.tui.requestRender();
+      }
+    }, 1000);
+  }
+
+  private async doRefresh(): Promise<void> {
+    this.isLoading = true;
+    this.errorMessage = "";
+    this.version++;
+    this.tui.requestRender();
+
+    try {
+      const quota = await fetchQuota(this.token);
+      this.quotaData = quota;
+      this.lastRefreshTime = Date.now();
+      this.lastRefreshAgo = 0;
+      this.isLoading = false;
+    } catch (e) {
+      this.isLoading = false;
+      this.errorMessage = e instanceof Error ? e.message : String(e);
+    }
+    this.version++;
+    this.tui.requestRender();
+  }
+
+  private dispose(): void {
+    if (this.autoRefreshInterval) clearInterval(this.autoRefreshInterval);
+    if (this.tickInterval) clearInterval(this.tickInterval);
+  }
+
+  handleInput(data: string): void {
+    if (matchesKey(data, "q") || matchesKey(data, "escape")) {
+      this.dispose();
+      this.onClose();
+    } else if (matchesKey(data, "r")) {
+      this.doRefresh();
+    } else if (data === "?") {
+      this.showHelp = !this.showHelp;
+      this.version++;
+      this.tui.requestRender();
+    }
+  }
+
+  render(width: number): string[] {
+    if (this.cachedVersion === this.version && this.cachedWidth === width) {
+      return this.cachedLines;
+    }
+
+    const theme = this.theme;
+    const lines: string[] = [];
+
+    // Top border
+    lines.push(theme.fg("border", "─".repeat(width)));
+
+    // Header
+    const planType = this.quotaData?.planType ?? "pro";
+    const title = theme.bold("✨ Claude Usage Monitor") + " " + theme.fg("accent", `[${planType.toUpperCase()}]`);
+    let status: string;
+    if (this.errorMessage) {
+      status = theme.fg("error", `! ${this.errorMessage}`);
+    } else if (this.isLoading) {
+      status = theme.fg("dim", "⟳ loading...");
+    } else if (this.lastRefreshAgo === 0) {
+      status = theme.fg("success", "⟳ just now");
+    } else {
+      status = theme.fg("dim", `⟳ ${this.lastRefreshAgo}s ago`);
+    }
+
+    const titleWidth = visibleWidth(title);
+    const statusWidth = visibleWidth(status);
+    const gap = Math.max(1, width - titleWidth - statusWidth - 4);
+    lines.push("  " + title + " ".repeat(gap) + status + "  ");
+    lines.push(theme.fg("border", "─".repeat(width)));
+
+    if (this.showHelp) {
+      // Help screen
+      lines.push("");
+      lines.push(theme.bold("  Keybindings"));
+      lines.push("");
+      lines.push("  " + theme.fg("accent", "q / Esc") + "  — Close dashboard");
+      lines.push("  " + theme.fg("accent", "r") + "       — Force refresh");
+      lines.push("  " + theme.fg("accent", "?") + "       — Toggle help");
+      lines.push("");
+    } else if (!this.quotaData && this.isLoading) {
+      // Loading state
+      lines.push("");
+      lines.push("  " + theme.fg("dim", "Loading quota data..."));
+      lines.push("");
+    } else if (!this.quotaData && this.errorMessage) {
+      // Error state
+      lines.push("");
+      lines.push("  " + theme.fg("error", this.errorMessage));
+      lines.push("");
+    } else if (this.quotaData) {
+      // Donut charts side by side
+      const fiveHourLines = renderDonut(
+        this.quotaData.fiveHourUsagePct,
+        "5-Hour Quota",
+        this.quotaData.fiveHourResetTime,
+        theme,
+      );
+      const sevenDayLines = renderDonut(
+        this.quotaData.sevenDayUsagePct,
+        "Weekly Quota",
+        this.quotaData.sevenDayResetTime,
+        theme,
+      );
+
+      // Determine chart widths
+      const chartWidth = Math.max(...fiveHourLines.map(l => visibleWidth(l)), ...sevenDayLines.map(l => visibleWidth(l)));
+      const gapBetween = 6;
+      const totalChartsWidth = chartWidth * 2 + gapBetween;
+      const leftPad = Math.max(2, Math.floor((width - totalChartsWidth) / 2));
+
+      const maxLines = Math.max(fiveHourLines.length, sevenDayLines.length);
+      lines.push("");
+      for (let i = 0; i < maxLines; i++) {
+        const left = fiveHourLines[i] ?? "";
+        const right = sevenDayLines[i] ?? "";
+        const leftPadded = left + " ".repeat(Math.max(0, chartWidth - visibleWidth(left)));
+        const row = " ".repeat(leftPad) + leftPadded + " ".repeat(gapBetween) + right;
+        lines.push(truncateToWidth(row, width));
+      }
+      lines.push("");
+
+      // Model quotas
+      const modelLines = renderModelQuotas(this.quotaData, theme, width);
+      if (modelLines.length > 0) {
+        lines.push(theme.fg("border", "─".repeat(width)));
+        for (const ml of modelLines) {
+          lines.push(truncateToWidth(ml, width));
+        }
+        lines.push("");
+      }
+    }
+
+    // Footer
+    lines.push(theme.fg("border", "─".repeat(width)));
+    const helpText = theme.fg("dim", "q: Close  r: Refresh  ?: Help");
+    lines.push("  " + helpText);
+
+    this.cachedLines = lines;
+    this.cachedWidth = width;
+    this.cachedVersion = this.version;
+    return lines;
+  }
+
+  invalidate(): void {
+    this.cachedWidth = 0;
+    this.cachedVersion = -1;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Extension entry point
 // ---------------------------------------------------------------------------
 
 export default function (pi: ExtensionAPI) {
-  // /claudemon command — show quota inline or launch TUI
+  // /claudemon command — show quota inline or launch TUI dashboard
   pi.registerCommand("claudemon", {
     description: "Show Claude usage quota (--tui to launch dashboard)",
     handler: async (args, ctx) => {
       const trimmed = (args ?? "").trim();
 
-      // --tui flag: launch the full TUI dashboard
+      // --tui flag: launch the native pi TUI dashboard
       if (trimmed === "--tui" || trimmed === "-t") {
-        const result = await pi.exec("npx", ["claudemon"], { timeout: 300000 });
-        if (result.code !== 0 && result.stderr) {
-          ctx.ui.notify(`claudemon exited with error: ${result.stderr.slice(0, 200)}`, "error");
+        const token = getOAuthToken();
+        if (!token) {
+          ctx.ui.notify(
+            "Not authenticated. Run `claudemon setup` or `npx claudemon setup` first.",
+            "error",
+          );
+          return;
         }
+
+        await ctx.ui.custom<void>((tui, theme, _keybindings, done) => {
+          const dashboard = new ClaudemonDashboard(tui, theme, token, () => done());
+          return {
+            render: (w: number) => dashboard.render(w),
+            invalidate: () => dashboard.invalidate(),
+            handleInput: (data: string) => dashboard.handleInput(data),
+          };
+        });
+
         return;
       }
 
