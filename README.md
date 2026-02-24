@@ -92,6 +92,8 @@ pi install https://github.com/anistark/claudemon
 pi -e npm:claudemon
 ```
 
+![claudemon-skill](https://github.com/user-attachments/assets/23278db3-675a-4eda-9a98-0879eceb89d2)
+
 ### Usage
 
 | Command | Description |
