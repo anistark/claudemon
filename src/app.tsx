@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
 
 import { fetchQuota, AuthenticationError, QuotaFetchError } from "./api.js";
-import { getOAuthToken, isAuthenticated } from "./auth.js";
+import { getValidOAuthToken, isAuthenticated } from "./auth.js";
 import { loadConfig } from "./config.js";
 import { type QuotaData } from "./models.js";
 import { HeaderBar } from "./components/HeaderBar.js";
@@ -48,7 +48,7 @@ export function App({ version = "" }: AppProps): React.ReactElement {
     setErrorMessage("");
 
     try {
-      const token = getOAuthToken();
+      const token = await getValidOAuthToken();
       if (!token) return;
 
       const quota = await fetchQuota(token);
