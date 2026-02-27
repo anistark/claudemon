@@ -123,6 +123,78 @@ export function getOAuthToken(): string | null {
   return (tokenData["oauth_token"] as string) ?? null;
 }
 
+// ---------------------------------------------------------------------------
+// Token refresh
+// ---------------------------------------------------------------------------
+
+/**
+ * Refresh an expired OAuth token using the stored refresh_token.
+ * Posts to the token endpoint with grant_type=refresh_token.
+ * On success, saves the new tokens and returns the new access token.
+ */
+async function refreshStoredToken(): Promise<string | null> {
+  const tokenData = loadToken();
+  if (!tokenData) return null;
+
+  const refreshToken = tokenData["refresh_token"] as string | undefined;
+  if (!refreshToken) return null;
+
+  const config = loadConfig();
+  const clientId = config["oauth_client_id"] as string;
+  const tokenUrl = config["oauth_token_url"] as string;
+
+  let resp: Response;
+  try {
+    resp = await fetch(tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        grant_type: "refresh_token",
+        client_id: clientId,
+        refresh_token: refreshToken,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch {
+    return null;
+  }
+
+  if (!resp.ok) return null;
+
+  const data = (await resp.json()) as {
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+  };
+
+  const expiresAt = Date.now() + data.expires_in * 1000 - 5 * 60 * 1000;
+
+  storeToken({
+    oauth_token: data.access_token,
+    refresh_token: data.refresh_token,
+    expires_at: expiresAt,
+  });
+
+  return data.access_token;
+}
+
+/**
+ * Get a valid OAuth token, automatically refreshing if expired.
+ * Use this instead of getOAuthToken() in async contexts where
+ * you want transparent token renewal.
+ */
+export async function getValidOAuthToken(): Promise<string | null> {
+  // 1. Try sync path first (returns non-expired token if available)
+  const token = getOAuthToken();
+  if (token) return token;
+
+  // 2. Token is expired or missing — try refreshing claudemon's own stored token
+  const refreshed = await refreshStoredToken();
+  if (refreshed) return refreshed;
+
+  return null;
+}
+
 export function getSubscriptionType(): string | null {
   const creds = getClaudeCodeCredentials();
   return creds?.subscriptionType ?? null;

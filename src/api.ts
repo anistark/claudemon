@@ -68,8 +68,8 @@ export async function fetchQuota(oauthToken: string): Promise<QuotaData> {
 export async function validateToken(): Promise<
   { ok: true } | { ok: false; reason: string }
 > {
-  const { getOAuthToken } = await import("./auth.js");
-  const token = getOAuthToken();
+  const { getValidOAuthToken } = await import("./auth.js");
+  const token = await getValidOAuthToken();
 
   if (!token) {
     return {
