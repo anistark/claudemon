@@ -19,6 +19,17 @@ export class AuthenticationError extends QuotaFetchError {
   }
 }
 
+export class RateLimitError extends QuotaFetchError {
+  retryAfterMs: number;
+  constructor(retryAfterMs: number) {
+    super(
+      `Rate limited. Retry after ${Math.ceil(retryAfterMs / 1000)} seconds.`,
+    );
+    this.name = "RateLimitError";
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
 export async function fetchQuota(oauthToken: string): Promise<QuotaData> {
   const config = loadConfig();
   const usageUrl = config["oauth_usage_url"] as string;
@@ -48,6 +59,13 @@ export async function fetchQuota(oauthToken: string): Promise<QuotaData> {
     throw new AuthenticationError(
       "Access denied. Your token may lack the required permissions.",
     );
+  }
+  if (resp.status === 429) {
+    const retryAfter = resp.headers.get("retry-after");
+    const retryMs = retryAfter
+      ? Number(retryAfter) * 1000
+      : 60_000; // default 60s if no header
+    throw new RateLimitError(retryMs);
   }
   if (resp.status !== 200) {
     const text = await resp.text();

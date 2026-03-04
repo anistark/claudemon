@@ -58,7 +58,7 @@ Config file: `~/.config/claudemon/config.toml`
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `plan_type` | string | `"pro"` | Claude plan type (`pro` or `max`) |
-| `refresh_interval` | number | `5` | Auto-refresh interval in seconds |
+| `refresh_interval` | number | `30` | Auto-refresh interval in seconds |
 
 <details>
 <summary>Advanced OAuth settings (usually no need to change)</summary>

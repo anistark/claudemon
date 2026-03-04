@@ -101,6 +101,11 @@ async function fetchQuota(token: string): Promise<QuotaData> {
   if (resp.status === 401 || resp.status === 403) {
     throw new Error("OAuth token expired. Run `claudemon setup` to re-authenticate.");
   }
+  if (resp.status === 429) {
+    const retryAfter = resp.headers.get("retry-after");
+    const retrySec = retryAfter ? Number(retryAfter) : 60;
+    throw new Error(`Rate limited. Retry after ${retrySec} seconds.`);
+  }
   if (resp.status !== 200) {
     throw new Error(`API returned status ${resp.status}`);
   }

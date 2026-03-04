@@ -5,7 +5,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
 
-import { fetchQuota, AuthenticationError, QuotaFetchError } from "./api.js";
+import { fetchQuota, AuthenticationError, QuotaFetchError, RateLimitError } from "./api.js";
 import { getValidOAuthToken, isAuthenticated } from "./auth.js";
 import { loadConfig } from "./config.js";
 import { type QuotaData } from "./models.js";
@@ -22,7 +22,8 @@ interface AppProps {
 export function App({ version = "" }: AppProps): React.ReactElement {
   const { exit } = useApp();
   const config = useRef(loadConfig());
-  const refreshInterval = Number(config.current["refresh_interval"] ?? 5);
+  const baseRefreshInterval = Number(config.current["refresh_interval"] ?? 30);
+  const [refreshInterval, setRefreshInterval] = useState(baseRefreshInterval);
 
   const [quotaData, setQuotaData] = useState<QuotaData | null>(null);
   const [planType, setPlanType] = useState<string>(
@@ -57,9 +58,15 @@ export function App({ version = "" }: AppProps): React.ReactElement {
       lastRefreshTime.current = Date.now();
       setLastRefreshAgo(0);
       setIsLoading(false);
+      // Restore normal interval on success
+      setRefreshInterval(baseRefreshInterval);
     } catch (e) {
       setIsLoading(false);
-      if (e instanceof AuthenticationError) {
+      if (e instanceof RateLimitError) {
+        const backoffSec = Math.ceil(e.retryAfterMs / 1000);
+        setRefreshInterval(backoffSec);
+        setErrorMessage(`Rate limited — backing off ${backoffSec}s`);
+      } else if (e instanceof AuthenticationError) {
         setErrorMessage(e.message);
       } else if (e instanceof QuotaFetchError) {
         setErrorMessage(`Fetch error: ${e.message}`);
@@ -67,7 +74,7 @@ export function App({ version = "" }: AppProps): React.ReactElement {
         setErrorMessage(`Error: ${e}`);
       }
     }
-  }, []);
+  }, [baseRefreshInterval]);
 
   // Initial fetch
   useEffect(() => {
