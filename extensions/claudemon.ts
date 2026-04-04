@@ -9,66 +9,16 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { matchesKey, truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { homedir, platform } from "node:os";
-import { join } from "node:path";
 
 // ---------------------------------------------------------------------------
-// Token resolution (same logic as claudemon's auth.ts)
+// Token resolution — uses pi's native auth via modelRegistry
 // ---------------------------------------------------------------------------
 
-function readKeychainCredentials(): Record<string, unknown> | null {
-  if (platform() !== "darwin") return null;
-  try {
-    const raw = execFileSync(
-      "/usr/bin/security",
-      ["find-generic-password", "-s", "Claude Code-credentials", "-w"],
-      { timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] },
-    );
-    if (!raw.trim()) return null;
-    return JSON.parse(raw.trim()) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
+type ModelRegistryCtx = { modelRegistry: { getApiKeyForProvider(p: string): Promise<string | undefined> } };
 
-function readFileCredentials(): Record<string, unknown> | null {
-  const credFile = join(homedir(), ".claude", ".credentials.json");
-  if (!existsSync(credFile)) return null;
-  try {
-    return JSON.parse(readFileSync(credFile, "utf-8")) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
-
-function readClaudemonToken(): string | null {
-  const tokenFile = join(homedir(), ".config", "claudemon", "token.json");
-  if (!existsSync(tokenFile)) return null;
-  try {
-    const data = JSON.parse(readFileSync(tokenFile, "utf-8"));
-    if (data.expires_at && data.expires_at < Date.now()) return null;
-    return data.oauth_token ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function getOAuthToken(): string | null {
-  // Prefer Claude Code's live credentials
-  for (const reader of [readKeychainCredentials, readFileCredentials]) {
-    const data = reader();
-    if (data) {
-      const oauth = data["claudeAiOauth"] as { accessToken?: string; expiresAt?: number } | undefined;
-      if (oauth?.accessToken) {
-        if (oauth.expiresAt && oauth.expiresAt < Date.now()) continue;
-        return oauth.accessToken;
-      }
-    }
-  }
-  // Fallback to claudemon's own stored token
-  return readClaudemonToken();
+async function getOAuthTokenFromCtx(ctx: ModelRegistryCtx): Promise<string | null> {
+  const apiKey = await ctx.modelRegistry.getApiKeyForProvider("anthropic");
+  return apiKey ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +49,7 @@ async function fetchQuota(token: string): Promise<QuotaData> {
   });
 
   if (resp.status === 401 || resp.status === 403) {
-    throw new Error("OAuth token expired. Run `claudemon setup` to re-authenticate.");
+    throw new Error("OAuth token expired or invalid. Try `/login` to re-authenticate.");
   }
   if (resp.status === 429) {
     const retryAfter = resp.headers.get("retry-after");
@@ -521,10 +471,10 @@ export default function (pi: ExtensionAPI) {
 
       // --tui flag: launch the native pi TUI dashboard
       if (trimmed === "--tui" || trimmed === "-t") {
-        const token = getOAuthToken();
+        const token = await getOAuthTokenFromCtx(ctx);
         if (!token) {
           ctx.ui.notify(
-            "Not authenticated. Run `claudemon setup` or `npx claudemon setup` first.",
+            "Not authenticated. Make sure you're logged in (`/login`).",
             "error",
           );
           return;
@@ -543,10 +493,10 @@ export default function (pi: ExtensionAPI) {
       }
 
       // Default: fetch and display inline
-      const token = getOAuthToken();
+      const token = await getOAuthTokenFromCtx(ctx);
       if (!token) {
         ctx.ui.notify(
-          "Not authenticated. Run `claudemon setup` or `npx claudemon setup` first.",
+          "Not authenticated. Make sure you're logged in (`/login`).",
           "error",
         );
         return;
@@ -571,14 +521,14 @@ export default function (pi: ExtensionAPI) {
     description:
       "Check the user's Claude Pro/Max plan quota usage including 5-hour and 7-day windows and per-model breakdown. Use when the user asks about their Claude usage, quota, or remaining capacity.",
     parameters: Type.Object({}),
-    async execute(_toolCallId, _params, signal) {
-      const token = getOAuthToken();
+    async execute(_toolCallId, _params, signal, _onUpdate, ctx) {
+      const token = await getOAuthTokenFromCtx(ctx as ModelRegistryCtx);
       if (!token) {
         return {
           content: [
             {
               type: "text" as const,
-              text: "Not authenticated. The user needs to run `claudemon setup` or `npx claudemon setup` to authenticate first.",
+              text: "Not authenticated. The user needs to log in first (`/login`).",
             },
           ],
           isError: true,
